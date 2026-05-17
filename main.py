@@ -4,12 +4,90 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+import urllib.request
+import zipfile
+import os
 
 # Check ffmpeg
 def check_ffmpeg():
     if shutil.which("ffmpeg") is None:
-        print("Wymagane ffmpeg. Zainstaluj je i dodaj do PATH.")
-        sys.exit(1)
+        # spróbuj automatycznie pobrać i zainstalować ffmpeg lokalnie
+        try:
+            ensured = ensure_ffmpeg()
+            if not ensured:
+                print("Wymagane ffmpeg. Nie udało się pobrać automatycznie — zainstaluj je ręcznie i dodaj do PATH.")
+                sys.exit(1)
+        except Exception:
+            print("Wymagane ffmpeg. Zainstaluj je i dodaj do PATH.")
+            sys.exit(1)
+
+
+def ensure_ffmpeg(install_dir: Path = None) -> bool:
+    """Ensure ffmpeg is available. If not found, download static build and extract.
+
+    Returns True if ffmpeg is available after the call.
+    """
+    if shutil.which("ffmpeg") is not None:
+        return True
+
+    # target dir under user profile
+    if install_dir is None:
+        install_dir = Path.home() / '.transkryber' / 'ffmpeg'
+    install_dir = Path(install_dir)
+    bin_dir = install_dir / 'bin'
+    ffmpeg_exe = bin_dir / 'ffmpeg.exe'
+
+    if ffmpeg_exe.exists():
+        os.environ['PATH'] = str(bin_dir) + os.pathsep + os.environ.get('PATH', '')
+        return True
+
+    # Windows only automatic download for now
+    if sys.platform != 'win32':
+        return False
+
+    # choose a known static build URL (Gyan builds)
+    url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+
+    try:
+        install_dir.mkdir(parents=True, exist_ok=True)
+        print('Pobieranie ffmpeg...')
+        with tempfile.TemporaryDirectory() as td:
+            tmpzip = Path(td) / 'ffmpeg.zip'
+            urllib.request.urlretrieve(url, tmpzip)
+            with zipfile.ZipFile(tmpzip, 'r') as z:
+                z.extractall(td)
+            # znajdź rozpakowany folder z bin
+            extracted = Path(td)
+            ff_bin = None
+            for p in extracted.iterdir():
+                candidate = p / 'bin' / 'ffmpeg.exe'
+                if candidate.exists():
+                    ff_bin = p / 'bin'
+                    break
+            if ff_bin is None:
+                # możliwa inna struktura - search
+                for p in extracted.rglob('ffmpeg.exe'):
+                    ff_bin = p.parent
+                    break
+            if ff_bin is None:
+                return False
+            # skopiuj pliki bin do naszego folderu
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            for f in ff_bin.iterdir():
+                target = bin_dir / f.name
+                try:
+                    if f.is_file():
+                        with f.open('rb') as src, target.open('wb') as dst:
+                            dst.write(src.read())
+                except Exception:
+                    # ignore copy errors
+                    pass
+        # dodajemy do PATH dla bieżącego procesu
+        os.environ['PATH'] = str(bin_dir) + os.pathsep + os.environ.get('PATH', '')
+        # final check
+        return shutil.which('ffmpeg') is not None
+    except Exception as e:
+        return False
 
 
 def download_audio(url: str, out_dir: Path) -> Path:
