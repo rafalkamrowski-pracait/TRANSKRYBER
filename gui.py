@@ -21,6 +21,7 @@ class TranscriberGUI(tk.Tk):
         self.title('TRANSKRYBER')
         self.geometry('560x300')
         self.create_widgets()
+        self.bind_class('Entry', '<Control-v>', lambda event: event.widget.event_generate('<<Paste>>'))
 
     def create_widgets(self):
         pad = {'padx': 8, 'pady': 6}
