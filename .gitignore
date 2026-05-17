@@ -26,3 +26,8 @@ Thumbs.db
 
 # Package
 *.zip
+build/
+dist/
+*.spec
+gui.spec
+.vscode/
