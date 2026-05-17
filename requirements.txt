@@ -1,0 +1,6 @@
+yt-dlp
+python-docx
+openai-whisper
+faster-whisper
+ffmpeg-python
+torch
