@@ -30,10 +30,9 @@ class TranscriberGUI(tk.Tk):
 
         ttk.Label(frame, text='URL YouTube (lub zostaw puste, wybierz plik)').grid(row=0, column=0, sticky='w')
         self.url_var = tk.StringVar()
-        self.url_entry = tk.Entry(frame, textvariable=self.url_var, width=60)
-        self.url_entry.grid(row=1, column=0, columnspan=3, sticky='w', **pad)
-        self.url_entry.bind('<Control-v>', self.paste_url)
-        self.url_entry.bind('<Control-V>', self.paste_url)
+        self.url_entry = tk.Entry(frame, textvariable=self.url_var, width=50)
+        self.url_entry.grid(row=1, column=0, columnspan=2, sticky='w', **pad)
+        ttk.Button(frame, text='Wklej', command=self.paste_url).grid(row=1, column=2, sticky='w', padx=4)
 
         ttk.Label(frame, text='Lokalny plik:').grid(row=2, column=0, sticky='w')
         self.file_var = tk.StringVar()
@@ -73,9 +72,8 @@ class TranscriberGUI(tk.Tk):
             clipboard_text = self.clipboard_get()
             self.url_entry.delete(0, tk.END)
             self.url_entry.insert(0, clipboard_text)
-            return 'break'
-        except Exception:
-            return 'break'
+        except Exception as e:
+            messagebox.showerror('Błąd', f'Nie można wkleiće z schowka: {e}')
 
     def choose_save_dir(self):
         dp = filedialog.askdirectory(title='Wybierz folder zapisu')
