@@ -23,6 +23,7 @@ class TranscriberGUI(tk.Tk):
         self.create_widgets()
 
     def create_widgets(self):
+        self.is_running = False
         pad = {'padx': 8, 'pady': 6}
 
         frame = ttk.Frame(self)
@@ -32,6 +33,8 @@ class TranscriberGUI(tk.Tk):
         self.url_var = tk.StringVar()
         self.url_entry = tk.Entry(frame, textvariable=self.url_var, width=50)
         self.url_entry.grid(row=1, column=0, columnspan=2, sticky='w', **pad)
+        self.url_entry.bind("<Control-v>", lambda e: self.url_entry.insert(tk.INSERT, self.clipboard_get()))
+        self.url_entry.bind("<Control-V>", lambda e: self.url_entry.insert(tk.INSERT, self.clipboard_get()))
         ttk.Button(frame, text='Wklej', command=self.paste_url).grid(row=1, column=2, sticky='w', padx=4)
 
         ttk.Label(frame, text='Lokalny plik:').grid(row=2, column=0, sticky='w')
@@ -60,7 +63,8 @@ class TranscriberGUI(tk.Tk):
         self.progress = ttk.Label(frame, text='Gotowy')
         self.progress.grid(row=7, column=0, columnspan=2, sticky='w', **pad)
 
-        ttk.Button(frame, text='Start', command=self.start).grid(row=7, column=2, sticky='e')
+        self.start_btn = ttk.Button(frame, text='Start', command=self.start)
+        self.start_btn.grid(row=7, column=2, sticky='e')
 
     def choose_file(self):
         fp = filedialog.askopenfilename(title='Wybierz plik wideo/audio')
@@ -81,16 +85,29 @@ class TranscriberGUI(tk.Tk):
             self.save_dir_var.set(dp)
 
     def start(self):
-        if check_ffmpeg is None:
-            messagebox.showerror('Błąd', 'Nie można załadować modułów — uruchom skrypt z katalogu projektu.')
-            return
-        out_name = self.out_var.get().strip()
-        if not out_name or out_name == 'transkrypcja':
-            messagebox.showerror('Błąd', 'Podaj inną nazwę pliku niż domyślna "transkrypcja".\nAby uniknąć nadpisywania pliku.')
-            self.out_var.focus()
-            return
-        t = threading.Thread(target=self.run_transcription, daemon=True)
-        t.start()
+        if not getattr(self, 'is_running', False):
+            # ---- URUCHAMIANIE TRANSKRYPCJI ----
+            if check_ffmpeg is None:
+                messagebox.showerror('Błąd', 'Nie można załadować modułów - uruchom skrypt z katalogu projektu.')
+                return
+                
+            out_name = self.out_var.get().strip()
+            if not out_name or out_name == 'transkrypcja':
+                messagebox.showerror('Błąd', 'Podaj inną nazwę pliku niż domyślna "transkrypcja".\nAby uniknąć nadpisania.')
+                return
+                
+            # Zmień flagę i napisy na przycisku
+            self.is_running = True
+            self.start_btn.configure(text='Stop')
+            
+            # Odpalenie wątku
+            t = threading.Thread(target=self.run_transcription, daemon=True)
+            t.start()
+        else:
+            # ---- ZATRZYMYWANIE TRANSKRYPCJI ----
+            self.is_running = False
+            self.start_btn.configure(text='Start')
+            self.set_progress('Zatrzymano na żądanie użytkownika.')
 
     def run_transcription(self):
         self.set_progress('Sprawdzam ffmpeg...')
@@ -102,7 +119,7 @@ class TranscriberGUI(tk.Tk):
             return
 
         url = self.url_var.get().strip()
-        filep = self.file_var.get().strip()
+        file = self.file_var.get().strip()
         save_dir = self.save_dir_var.get().strip() or str(Path.home() / 'Pobrane transkrypcje')
         out_name = self.out_var.get().strip() or 'transkrypcja'
         outbase = Path(save_dir) / out_name
@@ -117,11 +134,12 @@ class TranscriberGUI(tk.Tk):
                     self.set_progress('Pobieram audio...')
                     audio = download_audio(url, td_path)
                 else:
-                    if not filep:
-                        messagebox.showerror('Błąd', 'Podaj URL lub wybierz plik lokalny')
-                        self.set_progress('Anulowano')
-                        return
-                    audio = Path(filep)
+                    audio = file
+
+                # TUTAJ WSKAKUJE NASZA BLOKADA:
+                if not getattr(self, 'is_running', False):
+                    self.set_progress('Przerwano na żądanie użytkownika.')
+                    return
 
                 self.set_progress('Transkrypcja... (model: %s)' % model)
                 text = transcribe(audio, model)
@@ -136,7 +154,11 @@ class TranscriberGUI(tk.Tk):
 
                 self.set_progress('Zakończono: %s' % res)
                 messagebox.showinfo('Gotowe', f'Zapisano: {res}')
+                self.is_running = False
+                self.start_btn.configure(text='Start')
             except Exception as e:
+                self.is_running = False
+                self.start_btn.configure(text='Start')
                 messagebox.showerror('Błąd', str(e))
                 self.set_progress('Błąd')
 
